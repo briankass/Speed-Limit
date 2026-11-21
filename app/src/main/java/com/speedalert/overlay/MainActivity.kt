@@ -8,7 +8,10 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.location.Location
+import android.location.LocationManager
 import android.provider.Settings
+import android.view.View
 import android.widget.CheckBox
 import android.widget.TextView
 import android.widget.Toast
@@ -16,6 +19,10 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
+import androidx.core.widget.doAfterTextChanged
+import com.google.android.material.textfield.TextInputEditText
+import com.google.android.material.textfield.TextInputLayout
+import java.util.concurrent.Executors
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.button.MaterialButtonToggleGroup
 import com.google.android.material.materialswitch.MaterialSwitch
@@ -29,6 +36,8 @@ class MainActivity : AppCompatActivity() {
     private var testAlerts: AlertManager? = null
     private var waitingForOverlayPermission = false
     private val handler = Handler(Looper.getMainLooper())
+    private val testExecutor = Executors.newSingleThreadExecutor()
+    private var showingSource = Prefs.Source.OSM
 
     private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -50,6 +59,8 @@ class MainActivity : AppCompatActivity() {
         startStopButton.setOnClickListener {
             if (OverlayService.isRunning) stopOverlay() else tryStart()
         }
+
+        setupDataSource()
 
         // Tolerance: +0 / +5 / +10 / +15
         val group = findViewById<MaterialButtonToggleGroup>(R.id.toleranceGroup)
@@ -83,6 +94,119 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    // ---------- Speed limit data source ----------
+
+    private fun setupDataSource() {
+        val group = findViewById<MaterialButtonToggleGroup>(R.id.sourceGroup)
+        val ids = mapOf(
+            Prefs.Source.OSM to R.id.srcOsm,
+            Prefs.Source.HERE to R.id.srcHere,
+            Prefs.Source.TOMTOM to R.id.srcTomTom,
+        )
+        val keyInput = findViewById<TextInputEditText>(R.id.keyInput)
+        val keyResult = findViewById<TextView>(R.id.keyResult)
+
+        group.check(ids.getValue(prefs.source))
+        showSource(prefs.source)
+        group.addOnButtonCheckedListener { _, checkedId, isChecked ->
+            if (!isChecked) return@addOnButtonCheckedListener
+            val src = ids.entries.first { it.value == checkedId }.key
+            prefs.source = src
+            showSource(src)
+            if (OverlayService.isRunning) {
+                Toast.makeText(this, "Restart the overlay to switch data source", Toast.LENGTH_SHORT).show()
+            }
+        }
+
+        keyInput.doAfterTextChanged { text ->
+            when (showingSource) {
+                Prefs.Source.HERE -> prefs.hereKey = text?.toString() ?: ""
+                Prefs.Source.TOMTOM -> prefs.tomtomKey = text?.toString() ?: ""
+                Prefs.Source.OSM -> {}
+            }
+            keyResult.text = ""
+        }
+
+        findViewById<MaterialSwitch>(R.id.fallbackSwitch).apply {
+            isChecked = prefs.osmFallback
+            setOnCheckedChangeListener { _, checked -> prefs.osmFallback = checked }
+        }
+
+        findViewById<MaterialButton>(R.id.testKeyButton).setOnClickListener { testKey() }
+    }
+
+    private fun showSource(src: Prefs.Source) {
+        showingSource = Prefs.Source.OSM // don't save while swapping the text below
+        val section = findViewById<View>(R.id.keySection)
+        val keyLayout = findViewById<TextInputLayout>(R.id.keyLayout)
+        val keyInput = findViewById<TextInputEditText>(R.id.keyInput)
+        val help = findViewById<TextView>(R.id.keyHelp)
+        findViewById<TextView>(R.id.keyResult).text = ""
+        when (src) {
+            Prefs.Source.OSM -> section.visibility = View.GONE
+            Prefs.Source.HERE -> {
+                section.visibility = View.VISIBLE
+                keyLayout.hint = "HERE API key"
+                keyInput.setText(prefs.hereKey)
+                help.text = "Free key: sign up at https://platform.here.com, create an app, " +
+                    "then create an API key. Paste it above. Uses the HERE Routing API."
+            }
+            Prefs.Source.TOMTOM -> {
+                section.visibility = View.VISIBLE
+                keyLayout.hint = "TomTom API key"
+                keyInput.setText(prefs.tomtomKey)
+                help.text = "Free key: sign up at https://developer.tomtom.com and copy the " +
+                    "API key from your dashboard. Paste it above. Free plan: 2,500 lookups/day."
+            }
+        }
+        showingSource = src
+    }
+
+    @Suppress("MissingPermission")
+    private fun lastKnownLocation(): Location? {
+        if (!hasLocationPermission()) return null
+        val lm = getSystemService(LocationManager::class.java) ?: return null
+        return listOf(LocationManager.GPS_PROVIDER, LocationManager.NETWORK_PROVIDER)
+            .mapNotNull { runCatching { lm.getLastKnownLocation(it) }.getOrNull() }
+            .maxByOrNull { it.time }
+    }
+
+    /** Looks up the limit near you (or a test road in New York) to check the key works. */
+    private fun testKey() {
+        val src = prefs.source
+        val key = prefs.activeKey()
+        val result = findViewById<TextView>(R.id.keyResult)
+        if (key == null) {
+            result.text = "Paste a key first."
+            return
+        }
+        val loc = lastKnownLocation()
+        val lat = loc?.latitude ?: 40.7614
+        val lon = loc?.longitude ?: -73.9776
+        val where = if (loc != null) "near you" else "at the test road"
+        result.text = "Testing\u2026"
+        testExecutor.execute {
+            val r = runCatching {
+                if (src == Prefs.Source.HERE) {
+                    // A short hop ~150 m north-east so HERE has a route to measure
+                    OnlineLimits.here(key, lat, lon, lat + 0.001, lon + 0.001)
+                } else {
+                    OnlineLimits.tomtom(key, lat, lon, null)
+                }
+            }
+            handler.post {
+                if (isFinishing || isDestroyed) return@post
+                result.text = r.fold(
+                    onSuccess = { mph ->
+                        if (mph != null) "\u2705 Key works. Limit $where: $mph mph"
+                        else "\u2705 Key works (no limit found $where)"
+                    },
+                    onFailure = { "\u274C ${it.message ?: "Couldn't connect"}" }
+                )
+            }
+        }
+    }
+
     private fun bindCheck(id: Int, value: Boolean, save: (Boolean) -> Unit) {
         findViewById<CheckBox>(id).apply {
             isChecked = value
@@ -101,6 +225,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         handler.removeCallbacksAndMessages(null)
+        testExecutor.shutdownNow()
         testAlerts?.shutdown()
         testAlerts = null
         super.onDestroy()

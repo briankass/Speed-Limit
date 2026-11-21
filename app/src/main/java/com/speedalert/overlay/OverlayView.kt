@@ -36,6 +36,7 @@ class OverlayView(private val context: Context, private val prefs: Prefs) {
     private val speedText: TextView = root.findViewById(R.id.speedText)
     private val unitText: TextView = root.findViewById(R.id.unitText)
     private val messageText: TextView = root.findViewById(R.id.messageText)
+    private val sourceText: TextView = root.findViewById(R.id.sourceText)
 
     private val signBg = GradientDrawable().apply {
         setColor(Color.WHITE)
@@ -91,6 +92,11 @@ class OverlayView(private val context: Context, private val prefs: Prefs) {
     /** limit = posted limit (null = no data). offline = can't reach the map server. */
     fun setLimit(limit: Int?, offline: Boolean) {
         limitText.text = limit?.toString() ?: if (offline) "!" else "--"
+    }
+
+    /** Small label under the limit showing where it came from (OSM / HERE / TOMTOM). */
+    fun setSource(label: String) {
+        if (sourceText.text.toString() != label) sourceText.text = label
     }
 
     fun setSpeed(mph: Double?) {

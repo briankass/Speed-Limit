@@ -38,6 +38,33 @@ class Prefs(context: Context) {
         get() = getB("repeatWarning", false)
         set(v) = putB("repeatWarning", v)
 
+    enum class Source { OSM, HERE, TOMTOM }
+
+    /** Where speed limits come from. */
+    var source: Source
+        get() = runCatching { Source.valueOf(sp.getString("source", "OSM")!!) }.getOrDefault(Source.OSM)
+        set(v) = sp.edit().putString("source", v.name).apply()
+
+    var hereKey: String
+        get() = sp.getString("hereKey", "") ?: ""
+        set(v) = sp.edit().putString("hereKey", v.trim()).apply()
+
+    var tomtomKey: String
+        get() = sp.getString("tomtomKey", "") ?: ""
+        set(v) = sp.edit().putString("tomtomKey", v.trim()).apply()
+
+    /** Use OpenStreetMap when HERE/TomTom has no limit for the road. */
+    var osmFallback: Boolean
+        get() = getB("osmFallback", true)
+        set(v) = putB("osmFallback", v)
+
+    /** API key for the chosen source, or null for OpenStreetMap / missing key. */
+    fun activeKey(): String? = when (source) {
+        Source.HERE -> hereKey.ifBlank { null }
+        Source.TOMTOM -> tomtomKey.ifBlank { null }
+        Source.OSM -> null
+    }
+
     var overlayX: Int
         get() = sp.getInt("overlayX", 24)
         set(v) = sp.edit().putInt("overlayX", v).apply()

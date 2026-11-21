@@ -49,6 +49,8 @@ class OverlayService : Service(), LocationListener {
     private lateinit var prefs: Prefs
     private lateinit var alerts: AlertManager
     private lateinit var provider: SpeedLimitProvider
+    private var online: OnlineLimitSource? = null
+    private var useOsm = true
     private lateinit var overlay: OverlayView
     private lateinit var locationManager: LocationManager
     private val handler = Handler(Looper.getMainLooper())
@@ -58,6 +60,7 @@ class OverlayService : Service(), LocationListener {
     private var currentWayId: Long? = null
     private var candidateWayId: Long? = null
     private var candidateCount = 0
+    private var osmLimit: Int? = null
     private var currentLimit: Int? = null
     private var lastAnnouncedLimit: Int? = null
     private var lastLimitChangeAt = 0L
@@ -133,6 +136,9 @@ class OverlayService : Service(), LocationListener {
         prefs = Prefs(this)
         alerts = AlertManager(this)
         provider = SpeedLimitProvider()
+        val key = prefs.activeKey()
+        if (key != null) online = OnlineLimitSource(prefs.source, key)
+        useOsm = online == null || prefs.osmFallback
         overlay = OverlayView(this, prefs)
         overlay.show()
 
@@ -161,6 +167,7 @@ class OverlayService : Service(), LocationListener {
             overlay.hide()
             alerts.shutdown()
             provider.shutdown()
+            online?.shutdown()
         }
         super.onDestroy()
     }
@@ -185,22 +192,36 @@ class OverlayService : Service(), LocationListener {
         // GPS heading is only reliable when moving
         val bearing = if (location.hasBearing() && (mph ?: 0.0) > 5.0) location.bearing else null
 
-        provider.onLocation(location.latitude, location.longitude)
-        if (location.accuracy <= 50f) {
-            updateRoad(provider.match(location.latitude, location.longitude, bearing), now)
+        if (useOsm) {
+            provider.onLocation(location.latitude, location.longitude)
+            if (location.accuracy <= 50f) {
+                updateRoad(provider.match(location.latitude, location.longitude, bearing))
+            }
         }
-        overlay.setLimit(currentLimit, provider.isOffline && currentLimit == null)
+        online?.onLocation(location, bearing, mph)
+
+        // Prefer HERE/TomTom; fall back to OpenStreetMap when it has nothing
+        val onlineLimit = online?.limit
+        val (limit, label) = when {
+            onlineLimit != null -> onlineLimit to online!!.label
+            useOsm && osmLimit != null -> osmLimit to "OSM"
+            else -> null to (online?.label ?: "OSM")
+        }
+        setLimit(limit, now)
+        val offline = if (online != null) online!!.lastError != null else provider.isOffline
+        overlay.setLimit(currentLimit, offline && currentLimit == null)
+        overlay.setSource(label)
         overlay.setSpeed(mph)
         updateSpeeding(mph, now)
     }
 
     /** Only switch roads after two fixes in a row agree (prevents flicker at intersections). */
-    private fun updateRoad(match: SpeedLimitProvider.Match?, now: Long) {
+    private fun updateRoad(match: SpeedLimitProvider.Match?) {
         val id = match?.way?.id
         if (id == currentWayId) {
             candidateWayId = null
             candidateCount = 0
-            setLimit(match?.limitMph, now)
+            osmLimit = match?.limitMph
             return
         }
         if (id == candidateWayId) candidateCount++ else {
@@ -212,7 +233,7 @@ class OverlayService : Service(), LocationListener {
             currentWayId = id
             candidateWayId = null
             candidateCount = 0
-            setLimit(match?.limitMph, now)
+            osmLimit = match?.limitMph
         }
     }
 

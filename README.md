@@ -9,7 +9,17 @@ A small Android app that floats a speed-limit bubble on top of Google Maps (or a
   - Waits 2 seconds and gives 2 mph of slack so it doesn't keep beeping on and off
   - Gives you 6 seconds to slow down after the limit drops
   - Optional repeat every 30 seconds while still speeding
-- Speed limits come from **OpenStreetMap** (free, no account). Roads with no data show `--`.
+- Speed limits from your choice of **OpenStreetMap** (free, no key), **HERE** or **TomTom** (free API keys)
+  - With HERE/TomTom you can fall back to OpenStreetMap when they have no data
+  - A small label under the limit shows which source it came from (OSM / HERE / TOMTOM)
+  - Roads with no data show `--`
+
+## Getting a HERE or TomTom key
+- **TomTom**: sign up at https://developer.tomtom.com, copy the API key from your dashboard. Free plan: 2,500 lookups/day.
+- **HERE**: sign up at https://platform.here.com, create an app, then create an API key.
+
+In the app, pick HERE or TomTom under *Speed limit data*, paste the key, and tap **Test key**.
+Keys are stored only on your phone. The app asks for a new limit about every 200 m (or when you turn), so a typical hour of driving uses a few hundred lookups.
 
 ## Installing on your phone
 
