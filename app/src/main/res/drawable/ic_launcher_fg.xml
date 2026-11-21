@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <!-- sign body -->
+    <path android:fillColor="#FFFFFF" android:strokeColor="#000000" android:strokeWidth="3"
+        android:pathData="M38,30 h32 a4,4 0 0 1 4,4 v40 a4,4 0 0 1 -4,4 h-32 a4,4 0 0 1 -4,-4 v-40 a4,4 0 0 1 4,-4 z" />
+    <!-- "SPEED LIMIT" text lines -->
+    <path android:fillColor="#000000" android:pathData="M42,36 h24 v3 h-24 z M45,42 h18 v3 h-18 z" />
+    <!-- big "!" style number block -->
+    <path android:fillColor="#D32F2F" android:pathData="M50,50 h8 v14 h-8 z M50,67 h8 v6 h-8 z" />
+</vector>

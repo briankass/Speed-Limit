@@ -1,0 +1,136 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:fitsSystemWindows="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="20dp">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Speed Alert"
+            android:textSize="26sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/statusText"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="Stopped"
+            android:textSize="14sp" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/startStopButton"
+            android:layout_width="match_parent"
+            android:layout_height="60dp"
+            android:layout_marginTop="16dp"
+            android:text="Start overlay"
+            android:textSize="18sp" />
+
+        <!-- Tolerance -->
+        <TextView
+            style="@style/SectionTitle"
+            android:text="Warn me when I'm over the limit by" />
+
+        <com.google.android.material.button.MaterialButtonToggleGroup
+            android:id="@+id/toleranceGroup"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            app:selectionRequired="true"
+            app:singleSelection="true"
+            xmlns:app="http://schemas.android.com/apk/res-auto">
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/tol0"
+                style="?attr/materialButtonOutlinedStyle"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="+0" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/tol5"
+                style="?attr/materialButtonOutlinedStyle"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="+5" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/tol10"
+                style="?attr/materialButtonOutlinedStyle"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="+10" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/tol15"
+                style="?attr/materialButtonOutlinedStyle"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="+15" />
+        </com.google.android.material.button.MaterialButtonToggleGroup>
+
+        <!-- Limit change alerts -->
+        <TextView
+            style="@style/SectionTitle"
+            android:text="When the speed limit changes" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <CheckBox android:id="@+id/changeBeep" style="@style/AlertCheck" android:text="Beep" />
+            <CheckBox android:id="@+id/changeVoice" style="@style/AlertCheck" android:text="Voice" />
+            <CheckBox android:id="@+id/changeVibrate" style="@style/AlertCheck" android:text="Vibrate" />
+        </LinearLayout>
+
+        <!-- Speeding alerts -->
+        <TextView
+            style="@style/SectionTitle"
+            android:text="When I'm speeding" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <CheckBox android:id="@+id/speedBeep" style="@style/AlertCheck" android:text="Beep" />
+            <CheckBox android:id="@+id/speedVoice" style="@style/AlertCheck" android:text="Voice" />
+            <CheckBox android:id="@+id/speedVibrate" style="@style/AlertCheck" android:text="Vibrate" />
+        </LinearLayout>
+
+        <com.google.android.material.materialswitch.MaterialSwitch
+            android:id="@+id/repeatSwitch"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="Repeat speeding warning every 30 seconds" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/testButton"
+            style="?attr/materialButtonOutlinedStyle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="Test alerts" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="20dp"
+            android:alpha="0.7"
+            android:text="Tip: start the overlay, then open Google Maps. Drag the bubble wherever you like.\n\nSpeed limits come from OpenStreetMap (© OpenStreetMap contributors). Some roads have no data (shown as --) or out-of-date data. Always obey the posted signs."
+            android:textSize="13sp" />
+    </LinearLayout>
+</ScrollView>
