@@ -34,7 +34,9 @@ class SpeedLimitProvider {
         /** 1 = one-way along the drawing direction, -1 = against it, 0 = two-way */
         val oneway: Int,
         val pts: List<Pt>,
-    )
+    ) {
+        val normName: String? = RoadNames.normalize(name)
+    }
 
     class Match(val way: Way, val limitMph: Int?)
 
@@ -79,14 +81,19 @@ class SpeedLimitProvider {
         }
     }
 
-    /** Find the road you are most likely on. [bearing] is your heading in degrees, if known. */
-    fun match(lat: Double, lon: Double, bearing: Float?): Match? {
+    /**
+     * Find the road you are most likely on. [bearing] is your heading in degrees, if known.
+     * [currentRoad] (normalized name) gets a head start, so a side street has to be
+     * clearly closer before we switch to it.
+     */
+    fun match(lat: Double, lon: Double, bearing: Float?, currentRoad: String?): Match? {
         val cosLat = cos(Math.toRadians(lat))
         var best: Way? = null
         var bestScore = Double.MAX_VALUE
         var bestForward = true
 
         for (w in ways) {
+            val stickyBonus = if (currentRoad != null && w.normName == currentRoad) STICKY_BONUS_M else 0.0
             val pts = w.pts
             for (i in 0 until pts.size - 1) {
                 // Local flat coordinates in meters, with us at (0,0)
@@ -116,7 +123,7 @@ class SpeedLimitProvider {
                     }
                     penalty = diff / 90.0 * HEADING_WEIGHT_M
                 }
-                val score = dist + penalty
+                val score = dist + penalty - stickyBonus
                 if (score < bestScore) {
                     bestScore = score
                     best = w
@@ -213,7 +220,8 @@ class SpeedLimitProvider {
         private const val REFETCH_DISTANCE_M = 400.0
         private const val MIN_INTERVAL_MS = 5_000L
         private const val MAX_MATCH_DISTANCE_M = 40.0
-        private const val HEADING_WEIGHT_M = 20.0
+        private const val HEADING_WEIGHT_M = 25.0
+        private const val STICKY_BONUS_M = 12.0
         private const val M_PER_DEG = 111_195.0
 
         private val ENDPOINTS = listOf(

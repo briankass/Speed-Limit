@@ -14,6 +14,17 @@ A small Android app that floats a speed-limit bubble on top of Google Maps (or a
   - A small label under the limit shows which source it came from (OSM / HERE / TOMTOM)
   - Roads with no data show `--`
 
+## Sticking to your road
+Near intersections, GPS and map lookups sometimes pick up the cross street. The app keeps the
+road you're on unless you've actually turned (your heading changes) or several lookups in a row agree.
+
+## Fixing a wrong limit
+If a limit is wrong (e.g. a street changed from 35 to 25), start the overlay, park on that road,
+open the app and tap **Fix the speed limit here**. Check the street name, choose the correct
+limit and how far the fix should apply. Fixes show as **MINE** on the bubble and override all map data.
+You can also report the change to TomTom (https://www.tomtom.com/mapshare/tools) or edit it on
+OpenStreetMap (https://www.openstreetmap.org) so everyone gets it.
+
 ## Getting a HERE or TomTom key
 - **TomTom**: sign up at https://developer.tomtom.com, copy the API key from your dashboard. Free plan: 2,500 lookups/day.
 - **HERE**: sign up at https://platform.here.com, create an app, then create an API key.

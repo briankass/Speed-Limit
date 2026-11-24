@@ -13,6 +13,11 @@ import android.location.LocationManager
 import android.provider.Settings
 import android.view.View
 import android.widget.CheckBox
+import android.widget.EditText
+import android.widget.LinearLayout
+import android.widget.NumberPicker
+import android.widget.RadioButton
+import android.widget.RadioGroup
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
@@ -61,6 +66,8 @@ class MainActivity : AppCompatActivity() {
         }
 
         setupDataSource()
+        findViewById<MaterialButton>(R.id.fixHereButton).setOnClickListener { showFixDialog() }
+        refreshCorrections()
 
         // Tolerance: +0 / +5 / +10 / +15
         val group = findViewById<MaterialButtonToggleGroup>(R.id.toleranceGroup)
@@ -187,12 +194,13 @@ class MainActivity : AppCompatActivity() {
         result.text = "Testing\u2026"
         testExecutor.execute {
             val r = runCatching {
-                if (src == Prefs.Source.HERE) {
+                val res = if (src == Prefs.Source.HERE) {
                     // A short hop ~150 m north-east so HERE has a route to measure
                     OnlineLimits.here(key, lat, lon, lat + 0.001, lon + 0.001)
                 } else {
                     OnlineLimits.tomtom(key, lat, lon, null)
                 }
+                res.limit
             }
             handler.post {
                 if (isFinishing || isDestroyed) return@post
@@ -204,6 +212,119 @@ class MainActivity : AppCompatActivity() {
                     onFailure = { "\u274C ${it.message ?: "Couldn't connect"}" }
                 )
             }
+        }
+    }
+
+    // ---------- Personal corrections ----------
+
+    private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
+
+    private fun showFixDialog() {
+        val loc = OverlayService.liveLocation ?: lastKnownLocation()
+        if (loc == null) {
+            Toast.makeText(this, "Start the overlay first so the app knows where you are.", Toast.LENGTH_LONG).show()
+            return
+        }
+        val liveRoad = if (OverlayService.isRunning) OverlayService.liveRoad else null
+        val liveLimit = if (OverlayService.isRunning) OverlayService.liveLimit else null
+        val liveLabel = if (OverlayService.isRunning) OverlayService.liveLabel else null
+
+        val box = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(22), dp(8), dp(22), 0)
+        }
+        box.addView(TextView(this).apply {
+            text = if (liveLimit != null) "Currently showing $liveLimit mph ($liveLabel)." else
+                "Road name (check it matches what the app detected):"
+            textSize = 13f
+        })
+        val roadInput = EditText(this).apply {
+            hint = "Street name, e.g. Oak St"
+            setText(liveRoad ?: "")
+            isSingleLine = true
+        }
+        box.addView(roadInput)
+
+        box.addView(TextView(this).apply {
+            text = "Correct speed limit (mph):"
+            textSize = 13f
+            setPadding(0, dp(10), 0, 0)
+        })
+        val values = (5..85 step 5).toList()
+        val picker = NumberPicker(this).apply {
+            minValue = 0
+            maxValue = values.size - 1
+            displayedValues = values.map { it.toString() }.toTypedArray()
+            wrapSelectorWheel = false
+            value = values.indexOf(25)
+        }
+        box.addView(picker)
+
+        val radii = listOf(300 to "Just this stretch (~300 m / 1,000 ft)", 1000 to "Nearby (~1 km / 0.6 mi)", 5000 to "This whole street around here (~5 km / 3 mi)")
+        val group = RadioGroup(this)
+        radii.forEachIndexed { i, (_, label) ->
+            group.addView(RadioButton(this).apply {
+                id = View.generateViewId()
+                text = label
+                textSize = 13f
+                if (i == 1) isChecked = true
+            })
+        }
+        box.addView(group)
+
+        AlertDialog.Builder(this)
+            .setTitle("Fix the speed limit here")
+            .setView(box)
+            .setPositiveButton("Save") { _, _ ->
+                val road = roadInput.text.toString().trim()
+                if (road.isEmpty()) {
+                    Toast.makeText(this, "Enter the street name.", Toast.LENGTH_LONG).show()
+                    return@setPositiveButton
+                }
+                val idx = (0 until group.childCount).firstOrNull {
+                    (group.getChildAt(it) as RadioButton).isChecked
+                } ?: 1
+                Corrections(this).add(
+                    Correction(road, loc.latitude, loc.longitude, radii[idx].first, values[picker.value])
+                )
+                refreshCorrections()
+                Toast.makeText(this, "Saved: $road is ${values[picker.value]} mph here", Toast.LENGTH_SHORT).show()
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun refreshCorrections() {
+        val container = findViewById<LinearLayout>(R.id.correctionsList)
+        container.removeAllViews()
+        val store = Corrections(this)
+        for (c in store.load()) {
+            val row = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = android.view.Gravity.CENTER_VERTICAL
+                setPadding(0, dp(4), 0, 0)
+            }
+            val area = when {
+                c.radiusM <= 300 -> "this stretch"
+                c.radiusM <= 1000 -> "nearby"
+                else -> "whole street"
+            }
+            row.addView(TextView(this).apply {
+                text = "${c.road}: ${c.mph} mph ($area)"
+                textSize = 14f
+                layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+            })
+            row.addView(TextView(this).apply {
+                text = "Delete"
+                textSize = 14f
+                setTextColor(android.graphics.Color.parseColor("#D32F2F"))
+                setPadding(dp(12), dp(8), dp(4), dp(8))
+                setOnClickListener {
+                    store.remove(c)
+                    refreshCorrections()
+                }
+            })
+            container.addView(row)
         }
     }
 

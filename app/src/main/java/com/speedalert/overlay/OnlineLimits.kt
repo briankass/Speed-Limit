@@ -13,48 +13,55 @@ object OnlineLimits {
 
     class ApiException(message: String) : IOException(message)
 
+    /** limit in mph (null = no data) and the road name the service matched (if any). */
+    class Result(val limit: Int?, val road: String?)
+
     /**
      * HERE Routing v8: route a tiny stretch from where you were a moment ago to where you
      * are now, and read the speed limit of the last piece of road.
      */
-    fun here(key: String, fromLat: Double, fromLon: Double, toLat: Double, toLon: Double): Int? {
+    fun here(key: String, fromLat: Double, fromLon: Double, toLat: Double, toLon: Double): Result {
         val url = String.format(
             Locale.US,
             "https://router.hereapi.com/v8/routes?transportMode=car" +
                 "&origin=%.6f,%.6f&destination=%.6f,%.6f" +
-                "&return=polyline&spans=speedLimit&apiKey=%s",
+                "&return=polyline&spans=speedLimit,names&apiKey=%s",
             fromLat, fromLon, toLat, toLon, enc(key)
         )
+        val none = Result(null, null)
         val json = JSONObject(get(url, "HERE"))
         val routes = json.optJSONArray("routes")
-        if (routes == null || routes.length() == 0) return null
-        val sections = routes.getJSONObject(0).optJSONArray("sections") ?: return null
-        if (sections.length() == 0) return null
-        val spans = sections.getJSONObject(sections.length() - 1).optJSONArray("spans") ?: return null
-        if (spans.length() == 0) return null
+        if (routes == null || routes.length() == 0) return none
+        val sections = routes.getJSONObject(0).optJSONArray("sections") ?: return none
+        if (sections.length() == 0) return none
+        val spans = sections.getJSONObject(sections.length() - 1).optJSONArray("spans") ?: return none
+        if (spans.length() == 0) return none
         val last = spans.getJSONObject(spans.length() - 1)
-        if (!last.has("speedLimit")) return null
+        val road = last.optJSONArray("names")?.optJSONObject(0)?.optString("value")?.ifBlank { null }
         val metersPerSecond = last.optDouble("speedLimit", Double.NaN)
-        if (metersPerSecond.isNaN() || metersPerSecond <= 0) return null
-        return sane((metersPerSecond * 2.236936).roundToInt())
+        val limit = if (metersPerSecond.isNaN() || metersPerSecond <= 0) null
+        else sane((metersPerSecond * 2.236936).roundToInt())
+        return Result(limit, road)
     }
 
     /** TomTom Reverse Geocoding with returnSpeedLimit=true. */
-    fun tomtom(key: String, lat: Double, lon: Double, heading: Float?): Int? {
+    fun tomtom(key: String, lat: Double, lon: Double, heading: Float?): Result {
         val sb = StringBuilder(
             String.format(
                 Locale.US,
                 "https://api.tomtom.com/search/2/reverseGeocode/%.6f,%.6f.json" +
-                    "?key=%s&returnSpeedLimit=true&radius=50",
+                    "?key=%s&returnSpeedLimit=true&radius=25",
                 lat, lon, enc(key)
             )
         )
         if (heading != null) sb.append(String.format(Locale.US, "&heading=%.0f", heading))
+        val none = Result(null, null)
         val json = JSONObject(get(sb.toString(), "TomTom"))
-        val addresses = json.optJSONArray("addresses") ?: return null
-        if (addresses.length() == 0) return null
-        val address = addresses.getJSONObject(0).optJSONObject("address") ?: return null
-        return parseTomTom(address.optString("speedLimit", ""))
+        val addresses = json.optJSONArray("addresses") ?: return none
+        if (addresses.length() == 0) return none
+        val address = addresses.getJSONObject(0).optJSONObject("address") ?: return none
+        val road = address.optString("streetName", "").ifBlank { null }
+        return Result(parseTomTom(address.optString("speedLimit", "")), road)
     }
 
     private val TOMTOM_LIMIT = Regex("""^\s*(\d+(?:\.\d+)?)\s*(MPH|KPH|KMH|KM/H)\s*$""", RegexOption.IGNORE_CASE)

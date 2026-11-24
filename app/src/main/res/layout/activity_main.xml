@@ -140,6 +140,33 @@
                 android:text="Use OpenStreetMap when there's no data" />
         </LinearLayout>
 
+        <!-- Personal corrections -->
+        <TextView
+            style="@style/SectionTitle"
+            android:text="My speed limit fixes" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:alpha="0.75"
+            android:text="If a road's limit is wrong (e.g. it changed from 35 to 25), park on that road with the overlay running and tap the button. Your fix always wins over the map data."
+            android:textSize="12sp" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/fixHereButton"
+            style="?attr/materialButtonOutlinedStyle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:text="Fix the speed limit here" />
+
+        <LinearLayout
+            android:id="@+id/correctionsList"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical" />
+
         <!-- Tolerance -->
         <TextView
             style="@style/SectionTitle"
@@ -237,7 +264,7 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="20dp"
             android:alpha="0.7"
-            android:text="Tip: start the overlay, then open Google Maps. Drag the bubble wherever you like.\n\nThe small label under the limit shows where it came from (OSM, HERE or TOMTOM). Roads with no data show --. Changes to the data source apply the next time you start the overlay.\n\nOpenStreetMap data © OpenStreetMap contributors. Always obey the posted signs."
+            android:text="Tip: start the overlay, then open Google Maps. Drag the bubble wherever you like.\n\nThe small label under the limit shows where it came from (OSM, HERE, TOMTOM, or MINE for your own fixes). Roads with no data show --. Changes to the data source apply the next time you start the overlay.\n\nOpenStreetMap data © OpenStreetMap contributors. Always obey the posted signs."
             android:textSize="13sp" />
     </LinearLayout>
 </ScrollView>

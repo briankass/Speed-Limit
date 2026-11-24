@@ -44,6 +44,16 @@ class OverlayService : Service(), LocationListener {
         @Volatile
         var isRunning = false
             private set
+
+        // What the overlay currently shows, for the "Fix the limit here" button
+        @Volatile var liveRoad: String? = null
+            private set
+        @Volatile var liveLimit: Int? = null
+            private set
+        @Volatile var liveLabel: String? = null
+            private set
+        @Volatile var liveLocation: Location? = null
+            private set
     }
 
     private lateinit var prefs: Prefs
@@ -57,10 +67,16 @@ class OverlayService : Service(), LocationListener {
     private var started = false
 
     // Road / limit state
-    private var currentWayId: Long? = null
-    private var candidateWayId: Long? = null
+    private var osmRoadKey: String? = null
+    private var osmRoadName: String? = null
+    private var candidateKey: String? = null
     private var candidateCount = 0
     private var osmLimit: Int? = null
+    private lateinit var corrections: Corrections
+    private var correctionList: List<Correction> = emptyList()
+    private val correctionsListener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, _ ->
+        correctionList = corrections.load()
+    }
     private var currentLimit: Int? = null
     private var lastAnnouncedLimit: Int? = null
     private var lastLimitChangeAt = 0L
@@ -136,6 +152,9 @@ class OverlayService : Service(), LocationListener {
         prefs = Prefs(this)
         alerts = AlertManager(this)
         provider = SpeedLimitProvider()
+        corrections = Corrections(this)
+        correctionList = corrections.load()
+        corrections.listen(correctionsListener)
         val key = prefs.activeKey()
         if (key != null) online = OnlineLimitSource(prefs.source, key)
         useOsm = online == null || prefs.osmFallback
@@ -168,7 +187,12 @@ class OverlayService : Service(), LocationListener {
             alerts.shutdown()
             provider.shutdown()
             online?.shutdown()
+            corrections.unlisten(correctionsListener)
         }
+        liveRoad = null
+        liveLimit = null
+        liveLabel = null
+        liveLocation = null
         super.onDestroy()
     }
 
@@ -195,18 +219,30 @@ class OverlayService : Service(), LocationListener {
         if (useOsm) {
             provider.onLocation(location.latitude, location.longitude)
             if (location.accuracy <= 50f) {
-                updateRoad(provider.match(location.latitude, location.longitude, bearing))
+                updateRoad(provider.match(location.latitude, location.longitude, bearing, osmRoadKey))
             }
         }
         online?.onLocation(location, bearing, mph)
 
         // Prefer HERE/TomTom; fall back to OpenStreetMap when it has nothing
         val onlineLimit = online?.limit
-        val (limit, label) = when {
+        var (limit, label) = when {
             onlineLimit != null -> onlineLimit to online!!.label
             useOsm && osmLimit != null -> osmLimit to "OSM"
             else -> null to (online?.label ?: "OSM")
         }
+
+        // Your own corrections win over everything
+        val road = online?.road ?: osmRoadName
+        corrections.find(correctionList, road, location.latitude, location.longitude)?.let {
+            limit = it.mph
+            label = "MINE"
+        }
+        liveRoad = road
+        liveLimit = limit
+        liveLabel = label
+        liveLocation = location
+
         setLimit(limit, now)
         val offline = if (online != null) online!!.lastError != null else provider.isOffline
         overlay.setLimit(currentLimit, offline && currentLimit == null)
@@ -215,23 +251,28 @@ class OverlayService : Service(), LocationListener {
         updateSpeeding(mph, now)
     }
 
-    /** Only switch roads after two fixes in a row agree (prevents flicker at intersections). */
+    /**
+     * Roads are compared by name, so the many pieces OpenStreetMap splits a road into
+     * count as one road (and a limit change along it shows right away). Switching to a
+     * differently named road needs 3 fixes in a row (~3 s) to agree, which filters out
+     * cross streets you pass at intersections.
+     */
     private fun updateRoad(match: SpeedLimitProvider.Match?) {
-        val id = match?.way?.id
-        if (id == currentWayId) {
-            candidateWayId = null
+        val key = match?.let { it.way.normName ?: "way:${it.way.id}" }
+        if (key == osmRoadKey) {
+            candidateKey = null
             candidateCount = 0
             osmLimit = match?.limitMph
             return
         }
-        if (id == candidateWayId) candidateCount++ else {
-            candidateWayId = id
+        if (key == candidateKey) candidateCount++ else {
+            candidateKey = key
             candidateCount = 1
         }
-        val needed = if (id == null) 3 else 2
-        if (candidateCount >= needed || (currentWayId == null && id != null)) {
-            currentWayId = id
-            candidateWayId = null
+        if (candidateCount >= 3 || (osmRoadKey == null && key != null)) {
+            osmRoadKey = key
+            osmRoadName = match?.way?.name
+            candidateKey = null
             candidateCount = 0
             osmLimit = match?.limitMph
         }
